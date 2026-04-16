@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkWatch — Office Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0c10;
+    --surface:   #111318;
+    --surface2:  #181c24;
+    --border:    #232733;
+    --accent:    #00e5ff;
+    --accent2:   #ff3f6c;
+    --accent3:   #a259ff;
+    --green:     #00e676;
+    --yellow:    #ffd740;
+    --text:      #e8eaf0;
+    --muted:     #6b7280;
+    --font-mono: 'Space Mono', monospace;
+    --font-main: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-main);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BG */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* LOGIN */
+  #login-screen {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+  }
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 48px 40px;
+    width: 380px;
+    text-align: center;
+    box-shadow: 0 0 80px rgba(0,229,255,0.08);
+  }
+  .login-box .logo { font-size: 13px; letter-spacing: 4px; color: var(--accent); font-family: var(--font-mono); margin-bottom: 12px; }
+  .login-box h1 { font-size: 28px; font-weight: 800; margin-bottom: 32px; }
+  .login-box input {
+    width: 100%; padding: 14px 16px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text);
+    font-family: var(--font-mono); font-size: 15px;
+    margin-bottom: 16px; outline: none;
+    transition: border-color .2s;
+  }
+  .login-box input:focus { border-color: var(--accent); }
+  .login-box button {
+    width: 100%; padding: 14px;
+    background: var(--accent); color: #000;
+    border: none; border-radius: 8px;
+    font-family: var(--font-main); font-size: 16px; font-weight: 700;
+    cursor: pointer; transition: opacity .2s;
+  }
+  .login-box button:hover { opacity: .85; }
+  #login-error { color: var(--accent2); font-size: 13px; margin-top: 12px; min-height: 18px; }
+
+  /* MAIN APP */
+  #app { display: none; position: relative; z-index: 1; }
+
+  /* HEADER */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,12,16,.9);
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(12px);
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .logo-mark {
+    width: 38px; height: 38px; border-radius: 8px;
+    background: var(--accent); display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: #000;
+  }
+  .app-title { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+  .app-sub { font-size: 12px; color: var(--muted); font-family: var(--font-mono); letter-spacing: 2px; }
+  .header-right { display: flex; align-items: center; gap: 20px; }
+  .date-picker input {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); padding: 8px 12px;
+    font-family: var(--font-mono); font-size: 13px; outline: none;
+    cursor: pointer;
+  }
+  .refresh-btn {
+    padding: 8px 18px; border-radius: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--accent); font-family: var(--font-mono); font-size: 12px;
+    cursor: pointer; transition: all .2s; letter-spacing: 1px;
+  }
+  .refresh-btn:hover { background: var(--accent); color: #000; }
+  .online-badge {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--green);
+  }
+  .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(0,230,118,.4); }
+    50%      { box-shadow: 0 0 0 6px rgba(0,230,118,0); }
+  }
+
+  /* MAIN LAYOUT */
+  main { padding: 28px 32px; }
+
+  /* STAT CARDS ROW */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+    position: relative; overflow: hidden;
+    transition: border-color .2s;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .stat-card.c1::before { background: var(--accent); }
+  .stat-card.c2::before { background: var(--green); }
+  .stat-card.c3::before { background: var(--accent2); }
+  .stat-card.c4::before { background: var(--yellow); }
+  .stat-label { font-size: 11px; letter-spacing: 2px; color: var(--muted); font-family: var(--font-mono); margin-bottom: 8px; }
+  .stat-value { font-size: 32px; font-weight: 800; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* SECTION TITLES */
+  .section-title {
+    font-size: 13px; letter-spacing: 3px; color: var(--muted);
+    font-family: var(--font-mono); text-transform: uppercase;
+    margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* WORKERS GRID */
+  .workers-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px; margin-bottom: 32px;
+  }
+  .worker-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+    cursor: pointer; transition: all .2s;
+    position: relative;
+  }
+  .worker-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,229,255,.08); }
+  .worker-card.offline { opacity: .55; }
+
+  .worker-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .worker-name { font-weight: 700; font-size: 15px; }
+  .worker-status {
+    font-size: 11px; font-family: var(--font-mono); letter-spacing: 1px;
+    padding: 3px 10px; border-radius: 20px;
+  }
+  .worker-status.online  { background: rgba(0,230,118,.15); color: var(--green); }
+  .worker-status.offline { background: rgba(255,63,108,.1); color: var(--accent2); }
+
+  .productivity-bar-wrap { margin-bottom: 14px; }
+  .productivity-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .productivity-label span { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .productivity-label strong { font-size: 20px; font-weight: 800; }
+  .bar-track {
+    height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 3px;
+    transition: width .8s cubic-bezier(.4,0,.2,1);
+  }
+
+  .worker-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .mini-stat { background: var(--surface2); border-radius: 8px; padding: 8px 10px; text-align: center; }
+  .mini-stat .v { font-size: 15px; font-weight: 700; font-family: var(--font-mono); }
+  .mini-stat .l { font-size: 10px; color: var(--muted); letter-spacing: 1px; margin-top: 2px; }
+
+  .top-apps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .app-tag {
+    font-size: 11px; font-family: var(--font-mono);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 3px 8px; color: var(--muted);
+  }
+
+  .view-detail-btn {
+    margin-top: 14px; width: 100%; padding: 10px;
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 8px; color: var(--accent); font-family: var(--font-mono);
+    font-size: 12px; cursor: pointer; transition: all .2s; letter-spacing: 1px;
+  }
+  .view-detail-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.75);
+    z-index: 200; display: flex; align-items: flex-start; justify-content: center;
+    padding: 40px 20px; overflow-y: auto; backdrop-filter: blur(4px);
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; width: 100%; max-width: 960px;
+    position: relative; overflow: hidden;
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 24px 28px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--surface); z-index: 10;
+  }
+  .modal-title { font-size: 20px; font-weight: 800; }
+  .modal-close {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .modal-close:hover { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+  .modal-body { padding: 28px; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+  .tab {
+    padding: 8px 20px; border-radius: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--muted); font-family: var(--font-mono); font-size: 12px;
+    cursor: pointer; transition: all .2s; letter-spacing: 1px;
+  }
+  .tab.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 700; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* SCREENSHOTS */
+  .screenshots-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .screenshot-item {
+    background: var(--surface2); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border); cursor: pointer; transition: all .2s;
+    position: relative;
+  }
+  .screenshot-item:hover { border-color: var(--accent); }
+  .screenshot-item img { width: 100%; display: block; }
+  .screenshot-time {
+    padding: 6px 10px;
+    font-size: 11px; font-family: var(--font-mono); color: var(--muted);
+  }
+
+  /* ACTIVITY TIMELINE */
+  .timeline { display: flex; flex-direction: column; gap: 6px; max-height: 500px; overflow-y: auto; }
+  .timeline-row {
+    display: grid; grid-template-columns: 100px 1fr 80px 60px 60px;
+    gap: 12px; align-items: center; padding: 10px 14px;
+    background: var(--surface2); border-radius: 8px;
+    font-size: 13px;
+  }
+  .timeline-row .time { font-family: var(--font-mono); color: var(--muted); font-size: 11px; }
+  .timeline-row .proc { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .idle-badge {
+    font-size: 10px; font-family: var(--font-mono);
+    padding: 2px 8px; border-radius: 4px; text-align: center;
+  }
+  .idle-badge.active { background: rgba(0,230,118,.15); color: var(--green); }
+  .idle-badge.idle   { background: rgba(255,215,64,.1); color: var(--yellow); }
+
+  /* ACTIVITY CHART */
+  .activity-chart-wrap {
+    background: var(--surface2); border-radius: 12px; padding: 20px;
+    margin-bottom: 20px;
+  }
+  .chart-label { font-size: 11px; color: var(--muted); font-family: var(--font-mono); letter-spacing: 2px; margin-bottom: 12px; }
+  .hour-bars { display: flex; align-items: flex-end; gap: 4px; height: 60px; }
+  .hour-bar {
+    flex: 1; border-radius: 3px 3px 0 0;
+    transition: height .5s ease; min-height: 2px;
+    cursor: default; position: relative;
+  }
+  .hour-bar:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 8px;
+    font-size: 11px; font-family: var(--font-mono); white-space: nowrap;
+    color: var(--text); z-index: 10;
+  }
+
+  /* LIGHTBOX */
+  #lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,.92);
+    z-index: 999; display: flex; align-items: center; justify-content: center;
+  }
+  #lightbox.hidden { display: none; }
+  #lightbox img { max-width: 95vw; max-height: 90vh; border-radius: 8px; }
+  #lightbox-close {
+    position: fixed; top: 20px; right: 24px;
+    font-size: 28px; cursor: pointer; color: #fff; z-index: 1000;
+  }
+
+  /* TOAST */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 20px;
+    font-family: var(--font-mono); font-size: 13px;
+    z-index: 500; transform: translateY(80px); opacity: 0;
+    transition: all .3s;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+
+  /* LOADING */
+  .loading { text-align: center; padding: 60px; color: var(--muted); font-family: var(--font-mono); font-size: 13px; }
+  .spinner {
+    width: 32px; height: 32px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .7s linear infinite; margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  @media (max-width: 900px) {
+    .stats-row { grid-template-columns: repeat(2,1fr); }
+    main { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="logo">WORKWATCH</div>
+    <h1>Manager Login</h1>
+    <input type="password" id="pw-input" placeholder="Enter password" autocomplete="current-password">
+    <button onclick="doLogin()">Access Dashboard</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <header>
+    <div class="header-left">
+      <div class="logo-mark">WW</div>
+      <div>
+        <div class="app-title">WorkWatch</div>
+        <div class="app-sub">OFFICE MONITOR</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="date-picker">
+        <input type="date" id="date-picker" onchange="loadDashboard()">
+      </div>
+      <button class="refresh-btn" onclick="loadDashboard()">↻ REFRESH</button>
+      <div class="online-badge"><div class="pulse"></div><span id="online-count">0 ONLINE</span></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card c1"><div class="stat-label">TOTAL WORKERS</div><div class="stat-value" id="s-total">—</div><div class="stat-sub">registered PCs</div></div>
+      <div class="stat-card c2"><div class="stat-label">CURRENTLY ONLINE</div><div class="stat-value" id="s-online">—</div><div class="stat-sub">active right now</div></div>
+      <div class="stat-card c3"><div class="stat-label">AVG PRODUCTIVITY</div><div class="stat-value" id="s-avg">—</div><div class="stat-sub">today's average</div></div>
+      <div class="stat-card c4"><div class="stat-label">TOP PERFORMER</div><div class="stat-value" id="s-top" style="font-size:18px">—</div><div class="stat-sub">highest activity</div></div>
+    </div>
+
+    <div class="section-title">WORKER STATUS</div>
+    <div class="workers-grid" id="workers-grid">
+      <div class="loading"><div class="spinner"></div>Loading worker data...</div>
+    </div>
+  </main>
+</div>
+
+<!-- WORKER DETAIL MODAL -->
+<div class="modal-overlay hidden" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Worker Detail</div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('screenshots')">📷 Screenshots</button>
+        <button class="tab" onclick="switchTab('timeline')">📋 Activity Log</button>
+        <button class="tab" onclick="switchTab('chart')">📊 Activity Chart</button>
+      </div>
+      <div class="tab-content active" id="tab-screenshots">
+        <div id="screenshots-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+      </div>
+      <div class="tab-content" id="tab-timeline">
+        <div id="timeline-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+      </div>
+      <div class="tab-content" id="tab-chart">
+        <div id="chart-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox" class="hidden" onclick="closeLightbox()">
+  <span id="lightbox-close">✕</span>
+  <img id="lightbox-img" src="" alt="Screenshot">
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────
+const API = '';   // Same origin (server serves dashboard)
+let TOKEN = '';
+let currentWorker = null;
+
+// ── AUTH ──────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const pw = document.getElementById('pw-input').value;
+  try {
+    const r = await fetch(`${API}/api/login?password=${encodeURIComponent(pw)}`);
+    if (!r.ok) throw new Error('bad');
+    const d = await r.json();
+    TOKEN = d.token;
+    localStorage.setItem('ww_token', TOKEN);
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('date-picker').value = today();
+    loadDashboard();
+    startAutoRefresh();
+  } catch {
+    document.getElementById('login-error').textContent = 'Wrong password. Try again.';
+  }
+}
+document.getElementById('pw-input').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+// Auto-login if token stored
+window.addEventListener('load', () => {
+  const t = localStorage.getItem('ww_token');
+  if (t) {
+    TOKEN = t;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('date-picker').value = today();
+    loadDashboard();
+    startAutoRefresh();
+  }
+});
+
+// ── HELPERS ───────────────────────────────────────────────────────────────
+const headers = () => ({ 'Authorization': `Bearer ${TOKEN}` });
+const today   = () => new Date().toISOString().split('T')[0];
+const fmt     = ts  => ts ? ts.split('T')[1]?.slice(0,5) : '—';
+const fmtMins = m   => `${Math.floor(m/60)}h ${m%60}m`;
+
+function prodColor(pct) {
+  if (pct >= 70) return 'var(--green)';
+  if (pct >= 40) return 'var(--yellow)';
+  return 'var(--accent2)';
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function startAutoRefresh() {
+  setInterval(() => {
+    loadDashboard(true);
+  }, 60000); // refresh every 60s silently
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────
+async function loadDashboard(silent = false) {
+  const day = document.getElementById('date-picker').value || today();
+  if (!silent) document.getElementById('workers-grid').innerHTML = '<div class="loading"><div class="spinner"></div>Loading worker data...</div>';
+
+  try {
+    const [workersRes, summaryRes] = await Promise.all([
+      fetch(`${API}/api/workers`, { headers: headers() }),
+      fetch(`${API}/api/dashboard/summary?target_date=${day}`, { headers: headers() }),
+    ]);
+
+    if (workersRes.status === 401) { localStorage.removeItem('ww_token'); location.reload(); return; }
+
+    const workers  = await workersRes.json();
+    const summaries = await summaryRes.json();
+
+    // Build lookup
+    const statusMap = {};
+    workers.forEach(w => statusMap[w.worker] = w);
+
+    const onlineCount = workers.filter(w => w.online).length;
+    document.getElementById('online-count').textContent = `${onlineCount} ONLINE`;
+    document.getElementById('s-total').textContent  = workers.length;
+    document.getElementById('s-online').textContent = onlineCount;
+
+    if (summaries.length) {
+      const avg = Math.round(summaries.reduce((a,b) => a + b.productivity_pct, 0) / summaries.length);
+      document.getElementById('s-avg').textContent = `${avg}%`;
+      document.getElementById('s-top').textContent = summaries[0].worker.replace(/PC-?/i,'PC ');
+    }
+
+    renderWorkers(summaries, statusMap);
+    if (silent) toast('↻ Dashboard refreshed');
+  } catch(e) {
+    console.error(e);
+    document.getElementById('workers-grid').innerHTML = '<div class="loading">Failed to load. Check server connection.</div>';
+  }
+}
+
+function renderWorkers(summaries, statusMap) {
+  const grid = document.getElementById('workers-grid');
+  if (!summaries.length) {
+    grid.innerHTML = '<div class="loading">No data for this date.</div>';
+    return;
+  }
+
+  grid.innerHTML = summaries.map(s => {
+    const st   = statusMap[s.worker] || {};
+    const online = st.online;
+    const pct  = s.productivity_pct;
+    const col  = prodColor(pct);
+    const apps = (s.top_apps || []).slice(0,4).map(a => a[0].replace('.exe',''));
+
+    return `
+    <div class="worker-card ${online?'':'offline'}" data-worker="${s.worker}">
+      <div class="worker-header">
+        <div class="worker-name">💻 ${s.worker}</div>
+        <div class="worker-status ${online?'online':'offline'}">${online?'● ONLINE':'● OFFLINE'}</div>
+      </div>
+
+      <div class="productivity-bar-wrap">
+        <div class="productivity-label">
+          <span>PRODUCTIVITY</span>
+          <strong style="color:${col}">${pct}%</strong>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div>
+      </div>
+
+      <div class="worker-stats">
+        <div class="mini-stat">
+          <div class="v" style="color:var(--green)">${fmtMins(s.active_minutes)}</div>
+          <div class="l">ACTIVE</div>
+        </div>
+        <div class="mini-stat">
+          <div class="v" style="color:var(--yellow)">${fmtMins(s.idle_minutes)}</div>
+          <div class="l">IDLE</div>
+        </div>
+        <div class="mini-stat">
+          <div class="v" style="color:var(--accent)">${s.keystrokes.toLocaleString()}</div>
+          <div class="l">KEYS</div>
+        </div>
+      </div>
+
+      <div class="top-apps">
+        ${apps.map(a => `<span class="app-tag">${a}</span>`).join('')}
+      </div>
+
+      <div class="mini-stat" style="margin-top:10px;background:var(--surface2);border-radius:8px;padding:6px 10px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:var(--muted);font-family:var(--font-mono)">SCREENSHOTS</span>
+        <span style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--accent3)">${s.screenshot_count}</span>
+      </div>
+
+      <button class="view-detail-btn" onclick="openWorkerDetail('${s.worker}')">VIEW FULL DETAIL →</button>
+    </div>`;
+  }).join('');
+}
+
+// ── WORKER DETAIL MODAL ───────────────────────────────────────────────────
+async function openWorkerDetail(worker) {
+  currentWorker = worker;
+  document.getElementById('modal-title').textContent = `💻 ${worker} — Detail View`;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  switchTab('screenshots');
+  loadModalTab('screenshots');
+}
+
+function closeModal(e) {
+  if (e.target.id === 'modal-overlay') closeModalDirect();
+}
+function closeModalDirect() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const tabs = ['screenshots','timeline','chart'];
+    t.classList.toggle('active', tabs[i] === tab);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  loadModalTab(tab);
+}
+
+async function loadModalTab(tab) {
+  const day = document.getElementById('date-picker').value || today();
+  if (!currentWorker) return;
+
+  if (tab === 'screenshots') {
+    const c = document.getElementById('screenshots-container');
+    c.innerHTML = '<div class="loading"><div class="spinner"></div>Loading screenshots...</div>';
+    try {
+      const r = await fetch(`${API}/api/screenshots/${currentWorker}?target_date=${day}`, { headers: headers() });
+      const data = await r.json();
+      if (!data.length) { c.innerHTML = '<div class="loading">No screenshots for this date.</div>'; return; }
+      c.innerHTML = `<div class="screenshots-grid">
+        ${data.map(s => `
+          <div class="screenshot-item" onclick="openLightbox('data:image/jpeg;base64,${s.image}')">
+            <img src="data:image/jpeg;base64,${s.image}" loading="lazy" alt="Screenshot">
+            <div class="screenshot-time">🕐 ${fmt(s.timestamp)}</div>
+          </div>`).join('')}
+      </div>`;
+    } catch { c.innerHTML = '<div class="loading">Failed to load screenshots.</div>'; }
+  }
+
+  if (tab === 'timeline') {
+    const c = document.getElementById('timeline-container');
+    c.innerHTML = '<div class="loading"><div class="spinner"></div>Loading activity log...</div>';
+    try {
+      const r = await fetch(`${API}/api/activity/${currentWorker}?target_date=${day}`, { headers: headers() });
+      const data = await r.json();
+      if (!data.length) { c.innerHTML = '<div class="loading">No activity logged for this date.</div>'; return; }
+      c.innerHTML = `
+        <div style="display:grid;grid-template-columns:90px 1fr 100px 60px 70px;gap:8px;padding:8px 14px;font-size:11px;color:var(--muted);font-family:var(--font-mono);letter-spacing:1px;border-bottom:1px solid var(--border);margin-bottom:8px">
+          <span>TIME</span><span>APP / WINDOW</span><span>STATUS</span><span>KEYS</span><span>MOUSE</span>
+        </div>
+        <div class="timeline">
+          ${data.map(row => `
+            <div class="timeline-row">
+              <div class="time">${fmt(row.timestamp)}</div>
+              <div class="proc" title="${row.title||''}">${(row.process||'Unknown').replace('.exe','')}</div>
+              <div><span class="idle-badge ${row.idle > 120 ? 'idle':'active'}">${row.idle > 120 ? 'IDLE':'ACTIVE'}</span></div>
+              <div style="font-family:var(--font-mono);font-size:12px;color:var(--accent)">${row.keystrokes||0}</div>
+              <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">${row.mouse_moves||0}</div>
+            </div>`).join('')}
+        </div>`;
+    } catch { c.innerHTML = '<div class="loading">Failed to load activity.</div>'; }
+  }
+
+  if (tab === 'chart') {
+    const c = document.getElementById('chart-container');
+    c.innerHTML = '<div class="loading"><div class="spinner"></div>Building chart...</div>';
+    try {
+      const r = await fetch(`${API}/api/activity/${currentWorker}?target_date=${day}`, { headers: headers() });
+      const data = await r.json();
+      if (!data.length) { c.innerHTML = '<div class="loading">No data available.</div>'; return; }
+
+      // Build hourly buckets
+      const hours = Array(24).fill(0).map((_,i) => ({ h: i, active: 0, idle: 0, keys: 0 }));
+      data.forEach(row => {
+        const h = parseInt(row.timestamp?.split('T')[1]?.slice(0,2) || 0);
+        if (row.idle > 120) hours[h].idle++;
+        else hours[h].active++;
+        hours[h].keys += (row.keystrokes || 0);
+      });
+
+      const maxVal = Math.max(...hours.map(h => h.active + h.idle), 1);
+      const workHours = hours.filter(h => h.h >= 7 && h.h <= 20);
+
+      c.innerHTML = `
+        <div class="activity-chart-wrap">
+          <div class="chart-label">HOURLY ACTIVITY — ACTIVE (cyan) vs IDLE (yellow)</div>
+          <div class="hour-bars">
+            ${workHours.map(h => {
+              const total = h.active + h.idle;
+              const heightPct = (total / maxVal) * 100;
+              const activePct = total ? (h.active/total*100) : 0;
+              return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:60px;justify-content:flex-end">
+                <div class="hour-bar" style="height:${heightPct}%;width:100%;background:linear-gradient(to top,var(--accent) ${activePct}%,var(--yellow) ${activePct}%)" data-tip="${h.h}:00 | Active:${h.active}m Idle:${h.idle}m Keys:${h.keys}"></div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--font-mono);color:var(--muted)">
+            ${workHours.filter((_,i)=>i%2===0).map(h=>`<span>${h.h}:00</span>`).join('')}
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px">
+          <div class="mini-stat" style="padding:16px;background:var(--surface2)">
+            <div class="v" style="font-size:22px;color:var(--green)">${data.filter(r=>r.idle<=120).length}</div>
+            <div class="l" style="margin-top:4px">ACTIVE MINS</div>
+          </div>
+          <div class="mini-stat" style="padding:16px;background:var(--surface2)">
+            <div class="v" style="font-size:22px;color:var(--yellow)">${data.filter(r=>r.idle>120).length}</div>
+            <div class="l" style="margin-top:4px">IDLE MINS</div>
+          </div>
+          <div class="mini-stat" style="padding:16px;background:var(--surface2)">
+            <div class="v" style="font-size:22px;color:var(--accent)">${data.reduce((a,b)=>a+(b.keystrokes||0),0).toLocaleString()}</div>
+            <div class="l" style="margin-top:4px">TOTAL KEYS</div>
+          </div>
+        </div>`;
+    } catch { c.innerHTML = '<div class="loading">Failed to load chart.</div>'; }
+  }
+}
+
+// ── LIGHTBOX ──────────────────────────────────────────────────────────────
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.remove('hidden');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.add('hidden');
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') { closeModalDirect(); closeLightbox(); } });
+</script>
+</body>
+</html>
