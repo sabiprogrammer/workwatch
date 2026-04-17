@@ -102,10 +102,10 @@
   .app-sub { font-size: 12px; color: var(--muted); font-family: var(--font-mono); letter-spacing: 2px; }
   .header-right { display: flex; align-items: center; gap: 20px; }
   .date-picker input {
-    background: var(--surface); border: 1px solid var(--border);
+    background: var(--surface); border: 1px solid var(--accent);
     border-radius: 8px; color: var(--text); padding: 8px 12px;
     font-family: var(--font-mono); font-size: 13px; outline: none;
-    cursor: pointer;
+    cursor: pointer; color-scheme: dark;
   }
   .refresh-btn {
     padding: 8px 18px; border-radius: 8px;
@@ -479,7 +479,7 @@ window.addEventListener('load', () => {
 
 // ── HELPERS ───────────────────────────────────────────────────────────────
 const headers = () => ({ 'Authorization': `Bearer ${TOKEN}` });
-const today   = () => new Date().toISOString().split('T')[0];
+const today   = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const fmt     = ts  => ts ? ts.split('T')[1]?.slice(0,5) : '—';
 const fmtMins = m   => `${Math.floor(m/60)}h ${m%60}m`;
 
