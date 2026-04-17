@@ -415,6 +415,7 @@
         <button class="tab active" onclick="switchTab('screenshots')">📷 Screenshots</button>
         <button class="tab" onclick="switchTab('timeline')">📋 Activity Log</button>
         <button class="tab" onclick="switchTab('chart')">📊 Activity Chart</button>
+        <button class="tab" onclick="switchTab('urls')">🌐 Browser History</button>
       </div>
       <div class="tab-content active" id="tab-screenshots">
         <div id="screenshots-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
@@ -424,6 +425,9 @@
       </div>
       <div class="tab-content" id="tab-chart">
         <div id="chart-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+      </div>
+      <div class="tab-content" id="tab-urls">
+        <div id="urls-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
       </div>
     </div>
   </div>
@@ -619,7 +623,7 @@ function closeModalDirect() {
 
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const tabs = ['screenshots','timeline','chart'];
+    const tabs = ['screenshots','timeline','chart','urls'];
     t.classList.toggle('active', tabs[i] === tab);
   });
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -630,6 +634,52 @@ function switchTab(tab) {
 async function loadModalTab(tab) {
   const day = document.getElementById('date-picker').value || today();
   if (!currentWorker) return;
+
+
+  if (tab === 'urls') {
+    const c = document.getElementById('urls-container');
+    c.innerHTML = '<div class="loading"><div class="spinner"></div>Loading browser history...</div>';
+    try {
+      const r = await fetch(`${API}/api/activity/${currentWorker}?target_date=${day}`, { headers: headers() });
+      const data = await r.json();
+      // Collect all unique URLs from activity records
+      const urlMap = {};
+      data.forEach(record => {
+        if (record.urls && record.urls.length) {
+          record.urls.forEach(u => {
+            const key = u.url;
+            if (!urlMap[key]) urlMap[key] = { ...u, time: record.timestamp, count: 1 };
+            else urlMap[key].count++;
+          });
+        }
+      });
+      const urls = Object.values(urlMap).sort((a,b) => b.count - a.count);
+      if (!urls.length) { c.innerHTML = '<div class="loading">No browser history recorded for this date.</div>'; return; }
+      c.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px;">
+          <thead>
+            <tr style="color:var(--muted);text-align:left;border-bottom:1px solid var(--border);">
+              <th style="padding:8px;">BROWSER</th>
+              <th style="padding:8px;">PAGE TITLE</th>
+              <th style="padding:8px;">URL</th>
+              <th style="padding:8px;text-align:right;">VISITS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${urls.map(u => `
+              <tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="window.open('${u.url}','_blank')">
+                <td style="padding:8px;color:var(--accent);text-transform:uppercase;">${u.browser || '—'}</td>
+                <td style="padding:8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${u.title || '—'}</td>
+                <td style="padding:8px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);">${u.url}</td>
+                <td style="padding:8px;text-align:right;color:var(--yellow);">${u.count}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    } catch(e) {
+      c.innerHTML = '<div class="loading">Failed to load browser history.</div>';
+    }
+    return;
+  }
 
   if (tab === 'screenshots') {
     const c = document.getElementById('screenshots-container');
