@@ -312,6 +312,33 @@
     color: var(--text); z-index: 10;
   }
 
+
+  /* ATTENDANCE ROW ON WORKER CARD */
+  .attendance-row {
+    display: flex; gap: 12px; margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid var(--border);
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+  }
+  .attendance-row span { color: var(--text); font-weight: 700; }
+
+  /* PRODUCTIVITY TREND CHART */
+  .trend-bars { display:flex; gap:6px; align-items:flex-end; height:80px; margin:12px 0; }
+  .trend-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; justify-content:flex-end; }
+  .trend-bar { width:100%; border-radius:4px 4px 0 0; min-height:2px; transition:height .3s; }
+  .trend-label { font-size:9px; font-family:var(--font-mono); color:var(--muted); }
+
+  /* TOP APPS BAR CHART */
+  .app-bar-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .app-bar-name { font-family:var(--font-mono); font-size:11px; width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .app-bar-track { flex:1; height:8px; background:var(--surface2); border-radius:4px; overflow:hidden; }
+  .app-bar-fill { height:100%; border-radius:4px; background:var(--accent); }
+  .app-bar-mins { font-family:var(--font-mono); font-size:11px; color:var(--muted); width:50px; text-align:right; }
+
+  /* IDLE HEATMAP */
+  .heatmap-grid { display:grid; grid-template-columns:repeat(14,1fr); gap:3px; margin:12px 0; }
+  .heatmap-cell { aspect-ratio:1; border-radius:3px; }
+  .heatmap-legend { display:flex; align-items:center; gap:8px; font-size:10px; font-family:var(--font-mono); color:var(--muted); margin-top:6px; }
+
   /* LIGHTBOX */
   #lightbox {
     position: fixed; inset: 0; background: rgba(0,0,0,.92);
@@ -416,6 +443,9 @@
         <button class="tab" onclick="switchTab('timeline')">📋 Activity Log</button>
         <button class="tab" onclick="switchTab('chart')">📊 Activity Chart</button>
         <button class="tab" onclick="switchTab('urls')">🌐 Browser History</button>
+        <button class="tab" onclick="switchTab('trend')">📈 Weekly Trend</button>
+        <button class="tab" onclick="switchTab('topapps')">🏆 Top Apps</button>
+        <button class="tab" onclick="switchTab('heatmap')">🔥 Idle Heatmap</button>
       </div>
       <div class="tab-content active" id="tab-screenshots">
         <div id="screenshots-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
@@ -428,6 +458,15 @@
       </div>
       <div class="tab-content" id="tab-urls">
         <div id="urls-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+      </div>
+      <div class="tab-content" id="tab-trend">
+        <div id="trend-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+      </div>
+      <div class="tab-content" id="tab-topapps">
+        <div id="topapps-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+      </div>
+      <div class="tab-content" id="tab-heatmap">
+        <div id="heatmap-container"><div class="loading"><div class="spinner"></div>Loading...</div></div>
       </div>
     </div>
   </div>
@@ -462,6 +501,8 @@ async function doLogin() {
     document.getElementById('date-picker').value = today();
     loadDashboard();
     startAutoRefresh();
+    // Load first/last attendance for each worker
+    summaries.forEach(s => loadAttendance(s.worker, day));
   } catch {
     document.getElementById('login-error').textContent = 'Wrong password. Try again.';
   }
@@ -623,12 +664,28 @@ function closeModalDirect() {
 
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const tabs = ['screenshots','timeline','chart','urls'];
+    const tabs = ['screenshots','timeline','chart','urls','trend','topapps','heatmap'];
     t.classList.toggle('active', tabs[i] === tab);
   });
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById(`tab-${tab}`).classList.add('active');
   loadModalTab(tab);
+}
+
+
+async function loadAttendance(worker, day) {
+  try {
+    const r = await fetch(`${API}/api/first-last/${worker}?target_date=${day}`, { headers: headers() });
+    const d = await r.json();
+    const id = worker.replace(/[^a-z0-9]/gi,'_');
+    const el = document.getElementById(`att-${id}`);
+    if (!el) return;
+    const fmt2 = ts => ts ? ts.split('T')[1]?.slice(0,5) : '—';
+    el.innerHTML = `
+      <div>🕐 START <span>${fmt2(d.first_seen)}</span></div>
+      <div>🕔 END <span>${fmt2(d.last_seen)}</span></div>
+      <div>⏱ ACTIVE <span>${d.active_mins || 0}m</span></div>`;
+  } catch(e) {}
 }
 
 async function loadModalTab(tab) {
@@ -678,6 +735,127 @@ async function loadModalTab(tab) {
     } catch(e) {
       c.innerHTML = '<div class="loading">Failed to load browser history.</div>';
     }
+    return;
+  }
+
+
+  if (tab === 'trend') {
+    const c = document.getElementById('trend-container');
+    c.innerHTML = '<div class="loading"><div class="spinner"></div>Loading trend...</div>';
+    try {
+      const r = await fetch(`${API}/api/productivity-trend/${currentWorker}`, { headers: headers() });
+      const data = await r.json();
+      if (!data.length) { c.innerHTML = '<div class="loading">No trend data available.</div>'; return; }
+      const maxP = Math.max(...data.map(d => d.productivity), 1);
+      c.innerHTML = `
+        <div style="padding:8px 0">
+          <div style="font-size:11px;letter-spacing:2px;color:var(--muted);font-family:var(--font-mono);margin-bottom:16px">7-DAY PRODUCTIVITY TREND</div>
+          <div class="trend-bars">
+            ${data.map(d => {
+              const h = Math.max((d.productivity / 100) * 80, 2);
+              const col = d.productivity >= 70 ? 'var(--green)' : d.productivity >= 40 ? 'var(--yellow)' : 'var(--accent2)';
+              const dayLabel = d.date.slice(5);
+              return `<div class="trend-bar-wrap">
+                <div style="font-size:10px;font-family:var(--font-mono);color:${col}">${d.productivity}%</div>
+                <div class="trend-bar" style="height:${h}px;background:${col}" title="${d.date}: ${d.productivity}%"></div>
+                <div class="trend-label">${dayLabel}</div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:20px">
+            <div class="mini-stat" style="padding:16px;background:var(--surface2)">
+              <div class="v" style="font-size:22px;color:var(--green)">${Math.round(data.reduce((a,b)=>a+b.productivity,0)/data.length)}%</div>
+              <div class="l" style="margin-top:4px">7-DAY AVG</div>
+            </div>
+            <div class="mini-stat" style="padding:16px;background:var(--surface2)">
+              <div class="v" style="font-size:22px;color:var(--accent)">${Math.max(...data.map(d=>d.productivity))}%</div>
+              <div class="l" style="margin-top:4px">BEST DAY</div>
+            </div>
+            <div class="mini-stat" style="padding:16px;background:var(--surface2)">
+              <div class="v" style="font-size:22px;color:var(--yellow)">${data.filter(d=>d.productivity>0).length}</div>
+              <div class="l" style="margin-top:4px">DAYS ACTIVE</div>
+            </div>
+          </div>
+        </div>`;
+    } catch(e) { c.innerHTML = '<div class="loading">Failed to load trend.</div>'; }
+    return;
+  }
+
+  if (tab === 'topapps') {
+    const c = document.getElementById('topapps-container');
+    c.innerHTML = '<div class="loading"><div class="spinner"></div>Loading apps...</div>';
+    try {
+      const r = await fetch(`${API}/api/top-apps/${currentWorker}?target_date=${day}`, { headers: headers() });
+      const data = await r.json();
+      if (!data.length) { c.innerHTML = '<div class="loading">No app data for this date.</div>'; return; }
+      const maxMins = Math.max(...data.map(d => d.active_mins), 1);
+      c.innerHTML = `
+        <div style="padding:8px 0">
+          <div style="font-size:11px;letter-spacing:2px;color:var(--muted);font-family:var(--font-mono);margin-bottom:16px">TIME SPENT PER APP (ACTIVE MINUTES)</div>
+          ${data.map(d => `
+            <div class="app-bar-row">
+              <div class="app-bar-name">${d.app}</div>
+              <div class="app-bar-track">
+                <div class="app-bar-fill" style="width:${Math.round(d.active_mins/maxMins*100)}%"></div>
+              </div>
+              <div class="app-bar-mins">${d.active_mins}m</div>
+            </div>`).join('')}
+        </div>`;
+    } catch(e) { c.innerHTML = '<div class="loading">Failed to load apps.</div>'; }
+    return;
+  }
+
+  if (tab === 'heatmap') {
+    const c = document.getElementById('heatmap-container');
+    c.innerHTML = '<div class="loading"><div class="spinner"></div>Building heatmap...</div>';
+    try {
+      const r = await fetch(`${API}/api/activity/${currentWorker}?target_date=${day}`, { headers: headers() });
+      const data = await r.json();
+      if (!data.length) { c.innerHTML = '<div class="loading">No data for this date.</div>'; return; }
+      // Build minute-level grid from 7am to 8pm = 13 hours = 780 minutes, show as 14 cols x 56 rows
+      const minuteMap = {};
+      data.forEach(row => {
+        const ts = row.timestamp?.split('T')[1];
+        if (!ts) return;
+        const [hh, mm] = ts.split(':').map(Number);
+        const key = hh * 60 + mm;
+        minuteMap[key] = row.idle > 120 ? 'idle' : 'active';
+      });
+      const cells = [];
+      for (let h = 7; h <= 20; h++) {
+        for (let m = 0; m < 60; m += 5) {
+          const key = h * 60 + m;
+          const state = minuteMap[key];
+          const col = !state ? 'var(--surface2)' : state === 'active' ? 'var(--green)' : 'var(--accent2)';
+          cells.push(`<div class="heatmap-cell" style="background:${col}" title="${h}:${String(m).padStart(2,'0')} — ${state||'no data'}"></div>`);
+        }
+      }
+      c.innerHTML = `
+        <div style="padding:8px 0">
+          <div style="font-size:11px;letter-spacing:2px;color:var(--muted);font-family:var(--font-mono);margin-bottom:12px">ACTIVITY HEATMAP — 07:00 TO 20:00 (each cell = 5 mins)</div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--font-mono);color:var(--muted);margin-bottom:4px">
+            ${Array.from({length:14},(_,i)=>`<span>${7+i}:00</span>`).join('')}
+          </div>
+          <div class="heatmap-grid" style="grid-template-columns:repeat(${14*12/12},1fr)">
+            ${cells.join('')}
+          </div>
+          <div class="heatmap-legend">
+            <div style="width:12px;height:12px;background:var(--green);border-radius:2px"></div> Active
+            <div style="width:12px;height:12px;background:var(--accent2);border-radius:2px;margin-left:8px"></div> Idle
+            <div style="width:12px;height:12px;background:var(--surface2);border-radius:2px;margin-left:8px"></div> No data
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+            <div class="mini-stat" style="padding:16px;background:var(--surface2)">
+              <div class="v" style="font-size:22px;color:var(--green)">${Object.values(minuteMap).filter(v=>v==='active').length * 5}m</div>
+              <div class="l" style="margin-top:4px">ACTIVE TIME</div>
+            </div>
+            <div class="mini-stat" style="padding:16px;background:var(--surface2)">
+              <div class="v" style="font-size:22px;color:var(--accent2)">${Object.values(minuteMap).filter(v=>v==='idle').length * 5}m</div>
+              <div class="l" style="margin-top:4px">IDLE TIME</div>
+            </div>
+          </div>
+        </div>`;
+    } catch(e) { c.innerHTML = '<div class="loading">Failed to load heatmap.</div>'; }
     return;
   }
 

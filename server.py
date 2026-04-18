@@ -568,6 +568,77 @@ def get_worker_activity(worker: str, target_date: Optional[str] = None, _: bool 
         logger.error(f"get_activity error for {worker}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch activity")
 
+
+@app.get("/api/first-last/{worker}")
+def get_first_last(worker: str, target_date: Optional[str] = None, _: bool = Depends(verify_admin)):
+    """Return first and last active timestamp for a worker on a given date."""
+    day    = target_date or date.today().isoformat()
+    worker = sanitise_worker(worker)
+    try:
+        with get_db() as db:
+            row = db.execute("""
+                SELECT MIN(timestamp) as first_seen, MAX(timestamp) as last_seen,
+                       COUNT(*) as total_records,
+                       SUM(CASE WHEN idle_seconds <= 120 THEN 1 ELSE 0 END) as active_count
+                FROM activity WHERE worker=? AND timestamp LIKE ?
+            """, (worker, f"{day}%")).fetchone()
+        if not row or not row["first_seen"]:
+            return {"worker": worker, "first_seen": None, "last_seen": None, "active_mins": 0, "total_mins": 0}
+        return {
+            "worker":      worker,
+            "first_seen":  row["first_seen"],
+            "last_seen":   row["last_seen"],
+            "active_mins": row["active_count"] or 0,
+            "total_mins":  row["total_records"] or 0,
+        }
+    except Exception as e:
+        logger.error(f"get_first_last error for {worker}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch attendance data")
+
+@app.get("/api/productivity-trend/{worker}")
+def get_productivity_trend(worker: str, days: int = 7, _: bool = Depends(verify_admin)):
+    """Return daily productivity % for the last N days."""
+    worker = sanitise_worker(worker)
+    try:
+        result = []
+        for i in range(days - 1, -1, -1):
+            day = (date.today() - timedelta(days=i)).isoformat()
+            with get_db() as db:
+                row = db.execute("""
+                    SELECT COUNT(*) as total,
+                           SUM(CASE WHEN idle_seconds <= 120 THEN 1 ELSE 0 END) as active
+                    FROM activity WHERE worker=? AND timestamp LIKE ?
+                """, (worker, f"{day}%")).fetchone()
+            total  = row["total"] or 0
+            active = row["active"] or 0
+            pct    = round((active / total * 100)) if total > 0 else 0
+            result.append({"date": day, "productivity": pct, "active_mins": active, "total_mins": total})
+        return result
+    except Exception as e:
+        logger.error(f"get_productivity_trend error for {worker}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch trend data")
+
+@app.get("/api/top-apps/{worker}")
+def get_top_apps(worker: str, target_date: Optional[str] = None, _: bool = Depends(verify_admin)):
+    """Return ranked app usage with time spent per app for a given date."""
+    day    = target_date or date.today().isoformat()
+    worker = sanitise_worker(worker)
+    try:
+        with get_db() as db:
+            rows = db.execute("""
+                SELECT active_process, idle_seconds,
+                       SUM(CASE WHEN idle_seconds <= 120 THEN 1 ELSE 0 END) as active_mins,
+                       COUNT(*) as total_mins
+                FROM activity WHERE worker=? AND timestamp LIKE ?
+                GROUP BY active_process ORDER BY active_mins DESC LIMIT 15
+            """, (worker, f"{day}%")).fetchall()
+        return [{"app": (r["active_process"] or "Unknown").replace(".exe",""),
+                 "active_mins": r["active_mins"] or 0,
+                 "total_mins":  r["total_mins"]  or 0} for r in rows]
+    except Exception as e:
+        logger.error(f"get_top_apps error for {worker}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch app data")
+
 @app.get("/api/login")
 def login(password: str):
     if hashlib.sha256(password.encode()).hexdigest() == SECRET_TOKEN:
